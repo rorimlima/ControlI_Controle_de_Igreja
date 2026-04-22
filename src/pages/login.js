@@ -44,52 +44,44 @@ export function renderLogin(router) {
   
   const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
   const fullDate = today.toLocaleDateString('pt-BR', options);
-  // Capitalize first letter
   const formattedDate = fullDate.charAt(0).toUpperCase() + fullDate.slice(1);
 
   app.innerHTML = `
     <div class="login-page">
-      <div class="login-split">
-        <div class="login-hero">
-          <div class="login-hero-content">
-            <div class="login-date">
-              <span class="material-icons-round">calendar_today</span>
-              ${formattedDate}
-            </div>
-            <div class="login-verse-card">
-              <span class="material-icons-round verse-quote-icon">format_quote</span>
-              <p class="verse-text">"${verse.text}"</p>
-              <p class="verse-ref">- ${verse.ref}</p>
-            </div>
-          </div>
-          <div class="login-hero-overlay"></div>
-        </div>
+      <div class="login-container">
         
-        <div class="login-form-side">
-          <div class="login-card">
-            <div class="login-logo">
-              <img src="/icons/icon-512.png" alt="Control Igreja Logo" class="login-logo-img" />
-              <h1>Control Igreja</h1>
-              <p>Sistema de Gestão Integrada</p>
+        <div class="login-glass-card">
+          <div class="login-header">
+            <img src="/icons/icon-512.png" alt="Logo" class="login-logo-img" />
+            <h1>Control Igreja</h1>
+            <p>Sistema de Gestão Integrada</p>
+          </div>
+          
+          <form class="login-form" id="loginForm">
+            <div class="form-group">
+              <label class="form-label" for="loginEmail">E-mail</label>
+              <input type="email" class="form-control" id="loginEmail" placeholder="seu@email.com" required autocomplete="email" />
             </div>
-            <form class="login-form" id="loginForm">
-              <div class="form-group">
-                <label class="form-label" for="loginEmail">E-mail</label>
-                <input type="email" class="form-control" id="loginEmail" placeholder="seu@email.com" required autocomplete="email" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="loginPassword">Senha</label>
-                <input type="password" class="form-control" id="loginPassword" placeholder="••••••••" required autocomplete="current-password" />
-              </div>
-              <button type="submit" class="btn btn-primary login-btn" id="loginBtn">
-                Entrar
-              </button>
-            </form>
-            <div class="login-forgot">
-              <a href="#" id="forgotLink">Esqueceu a senha?</a>
+            <div class="form-group">
+              <label class="form-label" for="loginPassword">Senha</label>
+              <input type="password" class="form-control" id="loginPassword" placeholder="••••••••" required autocomplete="current-password" />
             </div>
+            <button type="submit" class="btn btn-primary login-btn" id="loginBtn">
+              Entrar
+            </button>
+          </form>
+          
+          <div class="login-forgot">
+            <a href="#" id="forgotLink">Esqueceu a senha?</a>
           </div>
         </div>
+
+        <div class="login-verse-footer">
+          <div class="login-date">${formattedDate}</div>
+          <p class="verse-text">"${verse.text}"</p>
+          <span class="verse-ref">— ${verse.ref}</span>
+        </div>
+
       </div>
     </div>
   `;
