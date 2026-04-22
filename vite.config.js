@@ -1,12 +1,17 @@
 import { defineConfig } from 'vite';
+import { resolve } from 'path';
 
 export default defineConfig({
-  base: './',
+  base: '/',
   build: {
     outDir: 'dist',
     sourcemap: false,
     minify: true,
     rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        landing: resolve(__dirname, 'landing.html'),
+      },
       output: {
         manualChunks(id) {
           if (id.includes('@supabase')) return 'vendor';
