@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Control Igreja — Gestão Integrada Inteligente</title>
+    <meta name="description" content="Transforme a gestão da sua igreja com tecnologia inteligente. Organize membros, finanças e eventos em um único sistema simples e poderoso.">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary: #1E3A5F;    /* Azul Profundo */
+            --primary-light: #2A5082;
+            --primary-dark: #0D1C2E;
+            --accent: #C8A951;     /* Dourado */
+            --accent-light: #E0C77A;
+            --accent-dark: #A5893C;
+            --bg-color: #0A1118;   /* Fundo Principal Dark */
+            --surface: #142233;    /* Fundo Cards */
+            --surface-light: #1A2B42;
+            
+            --text-main: #FFFFFF;
+            --text-muted: #A0B2C6;
+            --border: rgba(200, 169, 81, 0.2);
+            --radius-lg: 24px;
+            --radius: 12px;
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        h1, h2, h3, h4 {
+            font-family: 'Playfair Display', serif;
+            color: var(--accent);
+            line-height: 1.3;
+        }
+
+        a {
+            text-decoration: none;
+        }
+
+        /* Utils */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 5%;
+        }
+
+        .text-gradient {
+            background: linear-gradient(135deg, #FFF 0%, var(--accent) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 14px 28px;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: var(--transition);
+            border: none;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+            color: #000;
+            box-shadow: 0 4px 15px rgba(200, 169, 81, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(200, 169, 81, 0.5);
+            background: linear-gradient(135deg, var(--accent-light), var(--accent));
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--accent);
+            border: 2px solid var(--accent);
+        }
+
+        .btn-outline:hover {
+            background: rgba(200, 169, 81, 0.1);
+            transform: translateY(-2px);
+        }
+
+        /* Animations */
+        .fade-in {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.8s ease, transform 0.8s ease;
+        }
+        
+        .fade-in.appear {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Header / Navbar */
+        header {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            padding: 20px 0;
+            z-index: 1000;
+            transition: var(--transition);
+            background: rgba(10, 17, 24, 0.85);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid transparent;
+        }
+        
+        header.scrolled {
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo span { color: var(--accent); }
+
+        .nav-links { display: flex; gap: 30px; align-items: center; }
+        .nav-links a { color: var(--text-main); font-weight: 500; transition: var(--transition); }
+        .nav-links a:hover { color: var(--accent); }
+
+        /* Mobile Menu */
+        .hamburger { display: none; background: none; border: none; color: #FFF; font-size: 1.5rem; cursor: pointer; }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            padding-top: 100px;
+            position: relative;
+            background: radial-gradient(circle at 80% 20%, rgba(30,58,95, 0.4) 0%, transparent 50%);
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c8a951' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            z-index: -1;
+            opacity: 0.5;
+        }
+
+        .hero-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            align-items: center;
+        }
+
+        .hero-text h1 {
+            font-size: 3.5rem;
+            margin-bottom: 20px;
+            line-height: 1.2;
+            color: #FFF;
+        }
+
+        .hero-text p {
+            font-size: 1.25rem;
+            color: var(--text-muted);
+            margin-bottom: 40px;
+            max-width: 500px;
+        }
+
+        .hero-actions { display: flex; gap: 20px; }
+
+        .hero-mockup {
+            position: relative;
+            perspective: 1000px;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .mockup-frame {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.5), 0 0 40px rgba(200, 169, 81, 0.1);
+            transform: rotateY(-5deg) rotateX(5deg);
+            overflow: hidden;
+            position: relative;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+            100% { transform: translateY(0px); }
+        }
+
+        /* Proposta de Valor */
+        .features { padding: 100px 0; background: var(--bg-color); }
+        .section-header { text-align: center; margin-bottom: 60px; max-width: 700px; margin-left: auto; margin-right: auto; }
+        .section-header h2 { font-size: 2.5rem; margin-bottom: 15px; }
+        .section-header p { color: var(--text-muted); font-size: 1.1rem; }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 30px;
+        }
+
+        .feature-card {
+            background: var(--surface);
+            border: 1px solid rgba(255,255,255,0.05);
+            padding: 40px 30px;
+            border-radius: var(--radius-lg);
+            text-align: center;
+            transition: var(--transition);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px);
+            border-color: var(--accent);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .feature-icon {
+            width: 70px;
+            height: 70px;
+            background: rgba(200, 169, 81, 0.1);
+            color: var(--accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px auto;
+            font-size: 1.8rem;
+        }
+
+        .feature-card h3 { font-size: 1.3rem; margin-bottom: 15px; color: #FFF; }
+        .feature-card p { color: var(--text-muted); font-size: 0.95rem; }
+
+        /* Pricing */
+        .pricing { padding: 100px 0; background: linear-gradient(180deg, var(--bg-color) 0%, var(--primary-dark) 100%); }
+        
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            align-items: center;
+        }
+
+        .price-card {
+            background: var(--surface);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: var(--radius-lg);
+            padding: 40px;
+            position: relative;
+            transition: var(--transition);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .price-card:hover { transform: translateY(-5px); border-color: rgba(255,255,255,0.2); }
+
+        .price-card.popular {
+            background: linear-gradient(180deg, var(--surface) 0%, var(--surface-light) 100%);
+            border: 2px solid var(--accent);
+            transform: scale(1.05);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.6), 0 0 30px rgba(200, 169, 81, 0.15);
+            z-index: 10;
+        }
+
+        .price-card.popular:hover { transform: scale(1.05) translateY(-5px); }
+
+        .badge {
+            position: absolute;
+            top: -15px; left: 50%;
+            transform: translateX(-50%);
+            background: var(--accent);
+            color: #000;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .badge-alt { background: var(--primary-light); color: #FFF; }
+
+        .plan-name { font-family: 'Inter', sans-serif; font-size: 1.2rem; font-weight: 600; color: var(--text-muted); margin-bottom: 15px; text-transform: uppercase; letter-spacing: 2px; }
+        .plan-price { font-size: 3rem; font-family: 'Playfair Display', serif; color: #FFF; font-weight: 700; display: flex; align-items: baseline; gap: 5px; margin-bottom: 5px; }
+        .plan-price span { font-size: 1rem; color: var(--text-muted); font-family: 'Inter', sans-serif; font-weight: 400; }
+        .plan-desc { color: var(--accent); font-size: 0.9rem; margin-bottom: 30px; font-weight: 500;}
+
+        .plan-features { list-style: none; margin-bottom: 40px; flex: 1; }
+        .plan-features li { display: flex; align-items: center; gap: 12px; margin-bottom: 15px; color: var(--text-muted); font-size: 0.95rem; }
+        .plan-features li::before {
+            content: '✓';
+            color: var(--accent);
+            font-weight: bold;
+            background: rgba(200, 169, 81, 0.1);
+            width: 24px; height: 24px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .price-card .btn { width: 100%; border-radius: 8px; }
+
+        /* Testimonials (Prova Social) */
+        .testimonials { padding: 100px 0; background: var(--bg-color); }
+        .testimo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; }
+        .testimo-card {
+            background: var(--surface);
+            padding: 30px;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            position: relative;
+        }
+        .stars { color: var(--accent); font-size: 1.2rem; margin-bottom: 15px; }
+        .testimo-text { color: var(--text-muted); font-style: italic; margin-bottom: 20px; line-height: 1.7; }
+        .testimo-author { display: flex; align-items: center; gap: 15px; }
+        .author-img { width: 50px; height: 50px; border-radius: 50%; background: var(--primary-light); display:flex; align-items:center; justify-content:center; font-weight:bold; color:#FFF;}
+        .author-info h4 { font-family: 'Inter', sans-serif; color: #FFF; font-size: 1rem; margin-bottom: 2px;}
+        .author-info p { font-size: 0.8rem; color: var(--text-muted); }
+
+        /* FAQ */
+        .faq { padding: 100px 0; background: var(--bg-color); }
+        .faq-container { max-width: 800px; margin: 0 auto; }
+        .faq-item { margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.05); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+        .faq-question { padding: 20px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; font-weight: 600; color: #FFF; transition: var(--transition);}
+        .faq-question:hover { color: var(--accent); }
+        .faq-answer { padding: 0 20px; max-height: 0; overflow: hidden; transition: max-height 0.3s ease; color: var(--text-muted); line-height: 1.6; }
+        .faq-item.active .faq-answer { padding: 0 20px 20px 20px; max-height: 300px; }
+        .faq-item.active .faq-question { color: var(--accent); }
+        .arrow { transition: transform 0.3s ease; }
+        .faq-item.active .arrow { transform: rotate(180deg); }
+
+        /* CTA Final */
+        .cta-final { padding: 120px 0; text-align: center; background: radial-gradient(circle at center, var(--primary-light) 0%, var(--bg-color) 70%); }
+        .cta-final h2 { font-size: 3.5rem; color: #FFF; margin-bottom: 20px; }
+        .cta-final p { font-size: 1.2rem; color: var(--text-muted); margin-bottom: 40px; max-width: 600px; margin-left: auto; margin-right: auto; }
+        .cta-final .btn { padding: 18px 40px; font-size: 1.2rem; }
+
+        /* Footer */
+        footer { padding: 40px 0; background: #05090D; border-top: 1px solid rgba(255,255,255,0.05); text-align: center; color: var(--text-muted); font-size: 0.9rem; }
+        .footer-logo { font-size: 1.5rem; font-family: 'Playfair Display', serif; color: #FFF; margin-bottom: 20px; }
+        .footer-logo span { color: var(--accent); }
+
+        /* Mobile Adjustments */
+        @media (max-width: 900px) {
+            .hero-content { grid-template-columns: 1fr; text-align: center; }
+            .hero-text h1 { font-size: 2.5rem; }
+            .hero-text p { margin: 0 auto 30px auto; }
+            .hero-actions { justify-content: center; }
+            .hero-mockup { display: none; } /* Ocultar mockup complexo em telas menores para focar na CTA */
+            
+            .pricing-grid { grid-template-columns: 1fr; max-width: 400px; margin: 0 auto; gap: 40px; }
+            .price-card.popular { transform: scale(1); }
+            .price-card.popular:hover { transform: translateY(-5px); }
+            
+            .nav-links {
+                display: none;
+                position: absolute;
+                top: 100%; left: 0; right: 0;
+                background: var(--surface);
+                flex-direction: column;
+                padding: 20px;
+                border-bottom: 1px solid var(--border);
+            }
+            .nav-links.active { display: flex; }
+            .hamburger { display: block; }
+
+            .cta-final h2 { font-size: 2.5rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header id="header">
+        <div class="container navbar">
+            <div class="logo">
+                <img src="/icons/icon.svg" alt="" style="height: 32px; filter: drop-shadow(0 0 5px rgba(200,169,81,0.5));" />
+                Control<span>Igreja</span>
+            </div>
+            <button class="hamburger" id="menuBtn">☰</button>
+            <nav class="nav-links" id="navLinks">
+                <a href="#beneficios">Benefícios</a>
+                <a href="#planos">Planos</a>
+                <a href="#depoimentos">Depoimentos</a>
+                <a href="#faq">Dúvidas</a>
+                <a href="#" class="btn btn-outline" style="padding: 8px 18px; font-size: 0.95rem;">Fazer Login</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Hero -->
+    <section class="hero">
+        <div class="container hero-content">
+            <div class="hero-text fade-in">
+                <h1 class="text-gradient">Transforme a gestão da sua igreja com tecnologia dupla.</h1>
+                <p>Organize membros, finanças, tesouraria e patrimônio em um único sistema em nuvem, totalmente elegante e intuitivo.</p>
+                <div class="hero-actions">
+                    <a href="#planos" class="btn btn-primary">Começar Agora</a>
+                    <a href="#beneficios" class="btn btn-outline">Saber Mais</a>
+                </div>
+            </div>
+            <div class="hero-mockup fade-in" style="transition-delay: 0.2s;">
+                <div class="mockup-frame">
+                    <img src="public/dashboard_tour.webp" alt="Dashboard Animado Control Igreja" style="width: 100%; border-radius: 8px; border: 1px solid #1A2B42; display: block; box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Proposta de Valor -->
+    <section id="beneficios" class="features">
+        <div class="container">
+            <div class="section-header fade-in">
+                <h2>Tudo o que sua Igreja Precisa</h2>
+                <p>Abandone planilhas complexas. Nosso sistema foi desenhado para facilitar a rotina pastoral e contábil, devolvendo seu tempo para o que realmente importa: as pessoas.</p>
+            </div>
+            
+            <div class="features-grid">
+                <div class="feature-card fade-in">
+                    <div class="feature-icon">👥</div>
+                    <h3>Cadastro de Membros</h3>
+                    <p>Histórico completo de visitantes, nativos e líderes. Controle de ativos e relatórios em um clique.</p>
+                </div>
+                <div class="feature-card fade-in" style="transition-delay: 0.1s;">
+                    <div class="feature-icon">💰</div>
+                    <h3>Financeiro Transparente</h3>
+                    <p>Controle de entradas, saídas, conciliação e geração automática de Recibos de Dízimo em PDF com sua logo.</p>
+                </div>
+                <div class="feature-card fade-in" style="transition-delay: 0.2s;">
+                    <div class="feature-icon">🏢</div>
+                    <h3>Gestão de Patrimônio</h3>
+                    <p>Etiquetas únicas auto-geradas para cada ativo físico, garantindo organização contra perdas e auditoria simples.</p>
+                </div>
+                <div class="feature-card fade-in" style="transition-delay: 0.3s;">
+                    <div class="feature-icon">⛪</div>
+                    <h3>Multi-Congregações</h3>
+                    <p>Administre a Sede e várias Congregações dentro da mesma conta de forma compartimentada e segura.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Planos de Assinatura -->
+    <section id="planos" class="pricing">
+        <div class="container">
+            <div class="section-header fade-in">
+                <h2 style="color: #FFF;">Invista no Crescimento</h2>
+                <p>Escolha o plano que melhor atende sua congregação. Preços sem letras miúdas, sem taxa de setup e com cancelamento a qualquer momento.</p>
+            </div>
+
+            <div class="pricing-grid">
+                
+                <!-- Plano Mensal -->
+                <div class="price-card fade-in">
+                    <div class="plan-name">Mensal</div>
+                    <div class="plan-price">R$ 69<span>,90/mês</span></div>
+                    <div class="plan-desc" style="visibility: hidden;">Economia nula</div>
+                    <ul class="plan-features">
+                        <li>Membros Ilimitados</li>
+                        <li>Financeiro e Dízimos</li>
+                        <li>Recibos em PDF Personalizados</li>
+                        <li>Controle de Patrimônio</li>
+                        <li>Suporte por E-mail</li>
+                    </ul>
+                    <button class="btn btn-outline" onclick="goToCheckout('mensal')">Assinar Mensal</button>
+                </div>
+
+                <!-- Plano Semestral -->
+                <div class="price-card popular fade-in" style="transition-delay: 0.1s;">
+                    <div class="badge">Mais Popular</div>
+                    <div class="plan-name" style="color: var(--accent);">Semestral</div>
+                    <div class="plan-price">R$ 49<span>,90/mês</span></div>
+                    <div class="plan-desc">Economia de 28% (Cobrado R$ 299,40/semestre)</div>
+                    <ul class="plan-features">
+                        <li><b>Tudo do plano Mensal</b></li>
+                        <li>Exportação avançada de dados</li>
+                        <li>Multi-igrejas (Até 3 filiais)</li>
+                        <li>Suporte Prioritário WhatsApp</li>
+                    </ul>
+                    <button class="btn btn-primary" onclick="goToCheckout('semestral')">Assinar Agora</button>
+                </div>
+
+                <!-- Plano Anual -->
+                <div class="price-card fade-in" style="transition-delay: 0.2s;">
+                    <div class="badge badge-alt">Melhor Custo-Benefício</div>
+                    <div class="plan-name">Anual</div>
+                    <div class="plan-price">R$ 39<span>,90/mês</span></div>
+                    <div class="plan-desc">Economia de 42% (Cobrado R$ 478,80/ano)</div>
+                    <ul class="plan-features">
+                        <li><b>Tudo do plano Semestral</b></li>
+                        <li>Filiais Ilimitadas</li>
+                        <li>Treinamento em vídeo para Equipe</li>
+                        <li>Atendimento VIP</li>
+                    </ul>
+                    <button class="btn btn-outline" onclick="goToCheckout('anual')">Assinar Anual</button>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Prova Social -->
+    <section id="depoimentos" class="testimonials">
+        <div class="container">
+            <div class="section-header fade-in">
+                <h2>Pastores que recomendam</h2>
+                <p>Nossa maior alegria é ver os tesoureiros e pastores com tempo livre graças à automação do Control Igreja.</p>
+            </div>
+            
+            <div class="testimo-grid">
+                <div class="testimo-card fade-in">
+                    <div class="stars">★★★★★</div>
+                    <div class="testimo-text">"Abandonamos as planilhas do Excel. Hoje, os recibos de dízimo são gerados num clique e com o logo da nossa igreja. Deu uma cara super profissional."</div>
+                    <div class="author-author">
+                        <div class="author-info">
+                            <h4>Pr. Marcos S.</h4>
+                            <p>Igreja Batista Fonte de Água Viva</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="testimo-card fade-in" style="transition-delay: 0.1s;">
+                    <div class="stars">★★★★★</div>
+                    <div class="testimo-text">"O que mais gosto é a conciliação bancária e a emissão automática do código de patrimônio. Cortamos o trabalho dobrado do tesoureiro pela metade."</div>
+                    <div class="author-author">
+                        <div class="author-info">
+                            <h4>Roberto (Tesoureiro)</h4>
+                            <p>Comunidade Aliança</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="testimo-card fade-in" style="transition-delay: 0.2s;">
+                    <div class="stars">★★★★★</div>
+                    <div class="testimo-text">"Gerenciar 3 congregações ao mesmo tempo parecia missão impossível antes. Hoje consigo ter a visão macro e financeira das 3 no painel Master."</div>
+                    <div class="author-author">
+                        <div class="author-info">
+                            <h4>Pr. Claudio A.</h4>
+                            <p>Ministério Betel</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="faq">
+        <div class="container">
+            <div class="section-header fade-in">
+                <h2>Perguntas Frequentes</h2>
+            </div>
+            <div class="faq-container fade-in">
+                <div class="faq-item">
+                    <div class="faq-question">Preciso instalar algum programa no computador? <span class="arrow">▼</span></div>
+                    <div class="faq-answer"><br>Não! O Control Igreja é 100% nas nuvens (Web). Você consegue acessar de qualquer navegador, seja no seu computador Windows, Mac, ou direto do seu celular e tablet.</div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">Posso cancelar minha assinatura quando quiser? <span class="arrow">▼</span></div>
+                    <div class="faq-answer"><br>Sim, sem ressentimentos. Nosso modelo é sem fidelidade coercitiva no plano mensal, e se for nos pacotes longos, basta não renovar ao final do ciclo. Não temos multas escondidas.</div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">O aplicativo funciona bem no celular? <span class="arrow">▼</span></div>
+                    <div class="faq-answer"><br>Sim, a plataforma inteira foi pensada "Mobile-First". Isso significa que as tabelas de finanças, cadastro de membros e gráficos se adaptam como um aplicativo real na palma da sua mão.</div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">Existe suporte para transferir base de membros? <span class="arrow">▼</span></div>
+                    <div class="faq-answer"><br>Sim. Nosso suporte pode auxiliar você a preparar sua base legada para migrar ao Control Igreja (disponível nos planos Semestral e Anual).</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Final -->
+    <section class="cta-final">
+        <div class="container fade-in">
+            <h2>Comece Agora Sua Transformação</h2>
+            <p>Junte-se a pessoas inteligentes que decidiram profissionalizar sua operação, trazer transparência a seus membros e focar somente no Reino.</p>
+            <a href="#planos" class="btn btn-primary">Quero Assinar Agora</a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-logo" style="display:flex;align-items:center;justify-content:center;gap:10px;">
+                <img src="/icons/icon.svg" alt="" style="height: 32px; filter: drop-shadow(0 0 5px rgba(200,169,81,0.5));" />
+                Control<span>Igreja</span>
+            </div>
+            <p>&copy; 2026 Control Igreja. Todos os direitos reservados.</p>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script>
+        // Hamburger Menu
+        const menuBtn = document.getElementById('menuBtn');
+        const navLinks = document.getElementById('navLinks');
+        
+        menuBtn.addEventListener('click', () => {
+            navLinks.classList.toggle('active');
+        });
+
+        // Close menu on link click
+        document.querySelectorAll('.nav-links a').forEach(link => {
+            link.addEventListener('click', () => {
+                navLinks.classList.remove('active');
+            });
+        });
+
+        // Navbar scroll effect
+        window.addEventListener('scroll', () => {
+            const header = document.getElementById('header');
+            if (window.scrollY > 50) {
+                header.classList.add('scrolled');
+            } else {
+                header.classList.remove('scrolled');
+            }
+        });
+
+        // Scroll Animations (Fade in elements when visible)
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: "0px 0px -50px 0px"
+        };
+        
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('appear');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.fade-in').forEach(element => {
+            observer.observe(element);
+        });
+
+        // FAQ Toggle
+        document.querySelectorAll('.faq-question').forEach(button => {
+            button.addEventListener('click', () => {
+                const item = button.parentElement;
+                // Close other open answers (optional, but good UX)
+                document.querySelectorAll('.faq-item').forEach(otherItem => {
+                    if (otherItem !== item) {
+                        otherItem.classList.remove('active');
+                    }
+                });
+                item.classList.toggle('active');
+            });
+        });
+
+        // Checkout Placeholder Action
+        function goToCheckout(plan) {
+            console.log("Preparing checkout for plan: ", plan);
+            // TODO: Ação futura para integração com pagamento (Mercado Pago / Stripe / Modal)
+            // Aqui conectaremos com a base supabase criando a Subscription.
+            alert("Em breve! Integraremos a tela de pagamento aqui para o plano " + plan.toUpperCase() + ".\n\nSua estrutura comercial está montada perfeitamente.");
+        }
+    </script>
+</body>
+</html>
