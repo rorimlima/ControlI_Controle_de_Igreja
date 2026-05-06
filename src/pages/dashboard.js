@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase.js';
+import { db } from '../lib/db.js';
 import { renderLayout, getAppState } from '../main.js';
 import { formatCurrency, formatDate } from '../lib/utils.js';
 import Chart from 'chart.js/auto';
@@ -335,22 +335,20 @@ export async function renderDashboard() {
 
   // Load stats
   try {
-    const [membersRes, revenueRes, expensesRes, eventsRes] = await Promise.all([
-      supabase.from('members').select('id', { count: 'exact', head: true }).eq('church_id', churchId).eq('status', 'active'),
-      supabase.from('financial_transactions').select('amount').eq('church_id', churchId).in('type', ['dizimo','oferta','doacao']).gte('date', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]),
-      supabase.from('financial_transactions').select('amount').eq('church_id', churchId).eq('type', 'despesa').gte('date', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]),
-      supabase.from('events').select('id', { count: 'exact', head: true }).eq('church_id', churchId).gte('date', new Date().toISOString())
-    ]);
+    const allMembers = await db.members.where('church_id').equals(churchId).toArray();
+    const activeMembers = allMembers.filter(m => m.status === 'active');
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+    const allTx = await db.financial_transactions.where('church_id').equals(churchId).toArray();
+    const monthTx = allTx.filter(t => t.date >= monthStart);
+    const totalRevenue = monthTx.filter(t => ['dizimo','oferta','doacao'].includes(t.type)).reduce((s, r) => s + Number(r.amount || 0), 0);
+    const totalExpenses = monthTx.filter(t => t.type === 'despesa').reduce((s, r) => s + Number(r.amount || 0), 0);
+    const allEvents = await db.events.where('church_id').equals(churchId).toArray();
+    const futureEvents = allEvents.filter(e => e.date >= new Date().toISOString());
 
-    const totalMembers = membersRes.count || 0;
-    const totalRevenue = (revenueRes.data || []).reduce((s, r) => s + Number(r.amount), 0);
-    const totalExpenses = (expensesRes.data || []).reduce((s, r) => s + Number(r.amount), 0);
-    const totalEvents = eventsRes.count || 0;
-
-    document.getElementById('statMembers').textContent = totalMembers;
+    document.getElementById('statMembers').textContent = activeMembers.length;
     document.getElementById('statRevenue').textContent = formatCurrency(totalRevenue);
     document.getElementById('statExpenses').textContent = formatCurrency(totalExpenses);
-    document.getElementById('statEvents').textContent = totalEvents;
+    document.getElementById('statEvents').textContent = futureEvents.length;
   } catch (e) {
     console.error('Stats error:', e);
   }
@@ -359,13 +357,8 @@ export async function renderDashboard() {
   let birthdayMembers = [];
   let currentBirthdayMode = 'monthly';
   try {
-    const { data } = await supabase
-      .from('members')
-      .select('id, full_name, birth_date, phone, photo_url')
-      .eq('church_id', churchId)
-      .eq('status', 'active')
-      .not('birth_date', 'is', null);
-    birthdayMembers = data || [];
+    const allActive = await db.members.where('church_id').equals(churchId).toArray();
+    birthdayMembers = allActive.filter(m => m.status === 'active' && m.birth_date);
 
     const listContainer = document.getElementById('birthdayList');
     const subtitleEl = document.getElementById('birthdaySubtitle');
@@ -409,7 +402,8 @@ export async function renderDashboard() {
 
   // Load upcoming events
   try {
-    const { data: events } = await supabase.from('events').select('*').eq('church_id', churchId).gte('date', new Date().toISOString()).order('date').limit(5);
+    const allEvts = await db.events.where('church_id').equals(churchId).toArray();
+    const events = allEvts.filter(e => e.date >= new Date().toISOString()).sort((a,b) => a.date.localeCompare(b.date)).slice(0, 5);
     const container = document.getElementById('upcomingEvents');
     if (events?.length) {
       container.innerHTML = events.map(ev => `
@@ -430,7 +424,8 @@ export async function renderDashboard() {
 
   // Load recent members
   try {
-    const { data: members } = await supabase.from('members').select('*').eq('church_id', churchId).order('created_at', { ascending: false }).limit(5);
+    const allMbrs = await db.members.where('church_id').equals(churchId).toArray();
+    const members = allMbrs.sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0)).slice(0, 5);
     const container = document.getElementById('recentMembers');
     if (members?.length) {
       container.innerHTML = members.map(m => `
@@ -450,6 +445,7 @@ export async function renderDashboard() {
 
   // Finance chart
   try {
+    const allTxChart = await db.financial_transactions.where('church_id').equals(churchId).toArray();
     const months = [];
     const revenues = [];
     const expenses = [];
@@ -460,10 +456,9 @@ export async function renderDashboard() {
       const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
       months.push(d.toLocaleString('pt-BR', { month: 'short' }));
 
-      const { data: rev } = await supabase.from('financial_transactions').select('amount').eq('church_id', churchId).in('type', ['dizimo','oferta','doacao']).gte('date', start).lte('date', end);
-      const { data: exp } = await supabase.from('financial_transactions').select('amount').eq('church_id', churchId).eq('type', 'despesa').gte('date', start).lte('date', end);
-      revenues.push((rev || []).reduce((s, r) => s + Number(r.amount), 0));
-      expenses.push((exp || []).reduce((s, r) => s + Number(r.amount), 0));
+      const monthTx = allTxChart.filter(t => t.date >= start && t.date <= end);
+      revenues.push(monthTx.filter(t => ['dizimo','oferta','doacao'].includes(t.type)).reduce((s, r) => s + Number(r.amount || 0), 0));
+      expenses.push(monthTx.filter(t => t.type === 'despesa').reduce((s, r) => s + Number(r.amount || 0), 0));
     }
 
     const ctx = document.getElementById('financeChart');
@@ -492,6 +487,8 @@ export async function renderDashboard() {
 
   // Members growth chart
   try {
+    const allMbrsChart = await db.members.where('church_id').equals(churchId).toArray();
+    const activeMbrs = allMbrsChart.filter(m => m.status === 'active');
     const months = [];
     const counts = [];
     for (let i = 5; i >= 0; i--) {
@@ -499,8 +496,7 @@ export async function renderDashboard() {
       d.setMonth(d.getMonth() - i);
       const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
       months.push(d.toLocaleString('pt-BR', { month: 'short' }));
-      const { count } = await supabase.from('members').select('id', { count: 'exact', head: true }).eq('church_id', churchId).eq('status', 'active').lte('member_since', end);
-      counts.push(count || 0);
+      counts.push(activeMbrs.filter(m => m.member_since && m.member_since <= end).length);
     }
 
     const ctx = document.getElementById('membersChart');

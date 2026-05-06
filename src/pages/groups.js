@@ -1,6 +1,6 @@
-import { supabase } from '../lib/supabase.js';
+import { db, addSyncQueue } from '../lib/db.js';
 import { renderLayout, getAppState } from '../main.js';
-import { $, showToast, showConfirm } from '../lib/utils.js';
+import { $, showToast, showConfirm, generateId } from '../lib/utils.js';
 
 export async function renderGroups() {
   const { church } = getAppState();
@@ -48,11 +48,17 @@ export async function renderGroups() {
   let allGroups=[], allMembers=[], editingId=null, currentGroupId=null;
 
   async function loadData() {
-    const [gRes,mRes] = await Promise.all([
-      supabase.from('groups').select('*, group_members(member_id, members(full_name))').eq('church_id',churchId).order('name'),
-      supabase.from('members').select('id,full_name').eq('church_id',churchId).eq('status','active').order('full_name')
-    ]);
-    allGroups=gRes.data||[]; allMembers=mRes.data||[];
+    const gRes = await db.groups.where('church_id').equals(churchId).toArray();
+    const mRes = (await db.members.where('church_id').equals(churchId).toArray()).filter(m => m.status === 'active');
+    
+    const groupMembers = await db.group_members.toArray();
+    for(let g of gRes) {
+      g.group_members = groupMembers.filter(gm => gm.group_id === g.id);
+    }
+    
+    allGroups=gRes.sort((a,b)=>a.name.localeCompare(b.name))||[]; 
+    allMembers=mRes.sort((a,b)=>a.full_name.localeCompare(b.full_name))||[];
+    
     renderCards();
     $('#gLeader').innerHTML='<option value="">Selecione</option>'+allMembers.map(m=>`<option value="${m.id}">${m.full_name}</option>`).join('');
   }
@@ -91,12 +97,22 @@ export async function renderGroups() {
 
   function editGroup(id){const g=allGroups.find(x=>x.id===id);if(!g)return;editingId=id;$('#gModalTitle').textContent='Editar Grupo';$('#gName').value=g.name;$('#gLeader').value=g.leader_id||'';$('#gDay').value=g.meeting_day||'';$('#gTime').value=g.meeting_time||'';$('#gLocation').value=g.location||'';$('#gDescription').value=g.description||'';$('#groupModal').classList.add('modal-overlay-active');}
 
-  async function deleteGroup(id){if(!await showConfirm('Excluir','Excluir este grupo?'))return;await supabase.from('groups').delete().eq('id',id);showToast('Grupo excluído','success');loadData();}
+  async function deleteGroup(id){if(!await showConfirm('Excluir','Excluir este grupo?'))return;await db.groups.delete(id);await addSyncQueue('groups', 'DELETE', null, id);showToast('Grupo excluído','success');loadData();}
 
   async function saveGroup(){
     const data={church_id:churchId,name:$('#gName').value.trim(),leader_id:$('#gLeader').value||null,meeting_day:$('#gDay').value||null,meeting_time:$('#gTime').value||null,location:$('#gLocation').value.trim()||null,description:$('#gDescription').value.trim()||null};
     if(!data.name){showToast('Nome é obrigatório','warning');return;}
-    try{if(editingId){await supabase.from('groups').update(data).eq('id',editingId);}else{await supabase.from('groups').insert(data);}showToast('Grupo salvo','success');closeModal();loadData();}catch(err){showToast('Erro: '+err.message,'error');}
+    try{
+      if(editingId){
+        await db.groups.update(editingId, data);
+        await addSyncQueue('groups', 'UPDATE', data, editingId);
+      }else{
+        data.id = generateId();
+        await db.groups.put(data);
+        await addSyncQueue('groups', 'INSERT', data);
+      }
+      showToast('Grupo salvo','success');closeModal();loadData();
+    }catch(err){showToast('Erro: '+err.message,'error');}
   }
 
   async function showGroupMembers(id){
@@ -106,18 +122,35 @@ export async function renderGroups() {
   }
 
   async function loadGroupMembers(){
-    const{data}=await supabase.from('group_members').select('*,members(full_name)').eq('group_id',currentGroupId);
+    const data = await db.group_members.where('group_id').equals(currentGroupId).toArray();
+    for(let gm of data) {
+      const m = await db.members.get(gm.member_id);
+      gm.members = m || {};
+    }
     const el=$('#gmList');
     if(!data?.length){el.innerHTML='<p class="text-muted text-center">Nenhum membro</p>';return;}
     el.innerHTML=data.map(gm=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span>${gm.members?.full_name||'—'}</span><button class="btn btn-ghost btn-sm gm-rm" data-id="${gm.id}" style="color:var(--danger)">✕</button></div>`).join('');
-    el.querySelectorAll('.gm-rm').forEach(b=>b.addEventListener('click',async()=>{await supabase.from('group_members').delete().eq('id',b.dataset.id);showToast('Removido','success');loadGroupMembers();loadData();}));
+    el.querySelectorAll('.gm-rm').forEach(b=>b.addEventListener('click',async()=>{
+      await db.group_members.delete(b.dataset.id);
+      await addSyncQueue('group_members', 'DELETE', null, b.dataset.id);
+      showToast('Removido','success');loadGroupMembers();loadData();
+    }));
   }
 
   $('#addGroupBtn')?.addEventListener('click',openModal);$('#closeGroupModal')?.addEventListener('click',closeModal);$('#cancelGroupBtn')?.addEventListener('click',closeModal);$('#saveGroupBtn')?.addEventListener('click',saveGroup);
   $('#groupModal')?.addEventListener('click',e=>{if(e.target.id==='groupModal')closeModal();});
   $('#closeGmModal')?.addEventListener('click',()=>$('#gmModal').classList.remove('modal-overlay-active'));
   $('#gmModal')?.addEventListener('click',e=>{if(e.target.id==='gmModal')$('#gmModal').classList.remove('modal-overlay-active');});
-  $('#gmAddBtn')?.addEventListener('click',async()=>{const v=$('#gmSelect').value;if(!v){showToast('Selecione','warning');return;}const{error}=await supabase.from('group_members').insert({group_id:currentGroupId,member_id:v});if(error){showToast(error.message.includes('duplicate')?'Já está no grupo':'Erro: '+error.message,'error');return;}showToast('Adicionado','success');loadGroupMembers();loadData();});
+  $('#gmAddBtn')?.addEventListener('click',async()=>{
+    const v=$('#gmSelect').value;
+    if(!v){showToast('Selecione','warning');return;}
+    const existing = (await db.group_members.where('group_id').equals(currentGroupId).toArray()).find(gm => gm.member_id === v);
+    if(existing){showToast('Já está no grupo', 'error');return;}
+    const data = { id: generateId(), group_id: currentGroupId, member_id: v };
+    await db.group_members.put(data);
+    await addSyncQueue('group_members', 'INSERT', data);
+    showToast('Adicionado','success');loadGroupMembers();loadData();
+  });
 
   loadData();
 }

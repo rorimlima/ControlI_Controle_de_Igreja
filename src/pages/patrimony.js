@@ -1,6 +1,6 @@
-import { supabase } from '../lib/supabase.js';
+import { db, addSyncQueue } from '../lib/db.js';
 import { renderLayout, getAppState } from '../main.js';
-import { $, showToast, showConfirm, formatCurrency, formatDate, getStatusBadge } from '../lib/utils.js';
+import { $, showToast, showConfirm, formatCurrency, formatDate, getStatusBadge, generateId } from '../lib/utils.js';
 
 /** Gera código único: PAT-AAAMMDD-XXX (ex: PAT-20260421-001) */
 function generateAssetCode(existingItems) {
@@ -136,8 +136,8 @@ export async function renderPatrimony() {
   let allItems = [], editingId = null, pendingCode = null;
 
   async function loadData() {
-    const { data } = await supabase.from('patrimony').select('*').eq('church_id', churchId).order('created_at', { ascending: false });
-    allItems = data || [];
+    const data = await db.patrimony.where('church_id').equals(churchId).toArray();
+    allItems = data.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)) || [];
     renderStats();
     renderTable();
   }
@@ -219,7 +219,8 @@ export async function renderPatrimony() {
 
   async function deleteItem(id) {
     if (!await showConfirm('Excluir', 'Excluir este item do patrimônio?')) return;
-    await supabase.from('patrimony').delete().eq('id', id);
+    await db.patrimony.delete(id);
+    await addSyncQueue('patrimony', 'DELETE', null, id);
     showToast('Item excluído', 'success');
     loadData();
   }
@@ -236,14 +237,18 @@ export async function renderPatrimony() {
       estimated_value: parseFloat($('#ptValue').value) || null,
       location: $('#ptLocation').value.trim() || null,
       acquisition_date: $('#ptDate').value || null,
-      notes: $('#ptNotes').value.trim() || null
+      notes: $('#ptNotes').value.trim() || null,
+      created_at: new Date().toISOString()
     };
 
     try {
       if (editingId) {
-        await supabase.from('patrimony').update(data).eq('id', editingId);
+        await db.patrimony.update(editingId, data);
+        await addSyncQueue('patrimony', 'UPDATE', data, editingId);
       } else {
-        await supabase.from('patrimony').insert(data);
+        data.id = generateId();
+        await db.patrimony.put(data);
+        await addSyncQueue('patrimony', 'INSERT', data);
       }
       showToast('Patrimônio salvo!', 'success');
       closeModal();

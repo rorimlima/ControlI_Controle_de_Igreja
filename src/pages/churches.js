@@ -1,6 +1,6 @@
-import { supabase } from '../lib/supabase.js';
+import { db, addSyncQueue } from '../lib/db.js';
 import { renderLayout, getAppState, setCurrentChurch } from '../main.js';
-import { $, showToast, showConfirm, formatDate } from '../lib/utils.js';
+import { $, showToast, showConfirm, formatDate, generateId } from '../lib/utils.js';
 
 export async function renderChurches() {
   const { profile } = getAppState();
@@ -54,8 +54,8 @@ export async function renderChurches() {
   let allChurches=[], editingId=null, currentLogoB64=null;
 
   async function loadData(){
-    const{data}=await supabase.from('churches').select('*').order('name');
-    allChurches=data||[];
+    const data = await db.churches.toArray();
+    allChurches = data.sort((a,b) => a.name.localeCompare(b.name));
     renderCards();
   }
 
@@ -103,7 +103,7 @@ export async function renderChurches() {
   function openModal(){editingId=null;currentLogoB64=null;$('#churchModalTitle').textContent='Nova Igreja';$('#churchForm').reset();updatePreview(null);$('#churchModal').classList.add('modal-overlay-active');}
   function closeModal(){$('#churchModal').classList.remove('modal-overlay-active');}
   function editChurch(id){const ch=allChurches.find(x=>x.id===id);if(!ch)return;editingId=id;currentLogoB64=ch.logo_url||null;$('#churchModalTitle').textContent='Editar Igreja';$('#cName').value=ch.name;$('#cCnpj').value=ch.cnpj||'';$('#cLeader').value=ch.leader_name||'';$('#cAddress').value=ch.address||'';$('#cEmail').value=ch.contact_email||'';$('#cPhone').value=ch.contact_phone||'';$('#cLogoFile').value='';updatePreview(currentLogoB64);$('#churchModal').classList.add('modal-overlay-active');}
-  async function deleteChurch(id){if(!await showConfirm('Excluir Igreja','Isso removerá todos os dados desta igreja. Continuar?'))return;await supabase.from('churches').delete().eq('id',id);showToast('Igreja excluída','success');if(localStorage.getItem('ci_church_id')===id){localStorage.removeItem('ci_church_id');setCurrentChurch(null);}loadData();}
+  async function deleteChurch(id){if(!await showConfirm('Excluir Igreja','Isso removerá todos os dados desta igreja. Continuar?'))return;await db.churches.delete(id);await addSyncQueue('churches', 'DELETE', null, id);showToast('Igreja excluída','success');if(localStorage.getItem('ci_church_id')===id){localStorage.removeItem('ci_church_id');setCurrentChurch(null);}loadData();}
   async function saveChurch(){
     const data={
       name:$('#cName').value.trim(),
@@ -116,11 +116,12 @@ export async function renderChurches() {
     };
     if(!data.name){showToast('Nome obrigatório','warning');return;}
     try{
-      if(editingId){await supabase.from('churches').update(data).eq('id',editingId);showToast('Igreja atualizada','success');}
+      if(editingId){await db.churches.update(editingId, data);await addSyncQueue('churches', 'UPDATE', data, editingId);showToast('Igreja atualizada','success');}
       else{
-        const{data:newChurch,error}=await supabase.from('churches').insert(data).select().single();
-        if(error)throw error;
-        if(!localStorage.getItem('ci_church_id')){setCurrentChurch(newChurch);}
+        data.id = generateId();
+        await db.churches.put(data);
+        await addSyncQueue('churches', 'INSERT', data);
+        if(!localStorage.getItem('ci_church_id')){setCurrentChurch(data);}
         showToast('Igreja criada','success');
       }
       closeModal();loadData();

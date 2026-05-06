@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase.js';
+import { db, addSyncQueue } from '../lib/db.js';
 import { renderLayout, getAppState } from '../main.js';
 import { $, showToast, getRoleBadge } from '../lib/utils.js';
 
@@ -58,9 +59,13 @@ export async function renderSettings() {
   $('#saveProfileBtn')?.addEventListener('click', async () => {
     const name = $('#sName').value.trim();
     if (!name) { showToast('Nome é obrigatório', 'warning'); return; }
-    const { error } = await supabase.from('profiles').update({ full_name: name }).eq('id', profile.id);
-    if (error) { showToast('Erro: ' + error.message, 'error'); return; }
-    showToast('Perfil atualizado com sucesso!', 'success');
+    try {
+      await db.profiles.update(profile.id, { full_name: name });
+      await addSyncQueue('profiles', 'UPDATE', { full_name: name }, profile.id);
+      showToast('Perfil atualizado com sucesso!', 'success');
+    } catch (error) {
+      showToast('Erro: ' + error.message, 'error');
+    }
   });
 
   $('#changePasswordBtn')?.addEventListener('click', async () => {

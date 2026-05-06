@@ -1,6 +1,6 @@
-import { supabase } from '../lib/supabase.js';
+import { db, addSyncQueue } from '../lib/db.js';
 import { renderLayout, getAppState } from '../main.js';
-import { $, showToast, showConfirm, formatDate, getStatusBadge } from '../lib/utils.js';
+import { $, showToast, showConfirm, formatDate, getStatusBadge, generateId } from '../lib/utils.js';
 
 export async function renderProjects() {
   const { church } = getAppState();
@@ -39,11 +39,16 @@ export async function renderProjects() {
   let allProjects=[],allMembers=[],editingId=null;
 
   async function loadData() {
-    const [pRes,mRes]=await Promise.all([
-      supabase.from('projects').select('*,project_participants(member_id)').eq('church_id',churchId).order('created_at',{ascending:false}),
-      supabase.from('members').select('id,full_name').eq('church_id',churchId).eq('status','active').order('full_name')
-    ]);
-    allProjects=pRes.data||[];allMembers=mRes.data||[];
+    const pRes = await db.projects.where('church_id').equals(churchId).toArray();
+    const mRes = (await db.members.where('church_id').equals(churchId).toArray()).filter(m => m.status === 'active');
+    
+    const participants = await db.project_participants.toArray();
+    for (let p of pRes) {
+      p.project_participants = participants.filter(pp => pp.project_id === p.id);
+    }
+    
+    allProjects=pRes.sort((a,b)=>new Date(b.created_at||0) - new Date(a.created_at||0))||[];
+    allMembers=mRes.sort((a,b)=>a.full_name.localeCompare(b.full_name))||[];
     renderCards();
     $('#pLeader').innerHTML='<option value="">Selecione</option>'+allMembers.map(m=>`<option value="${m.id}">${m.full_name}</option>`).join('');
   }
@@ -82,12 +87,22 @@ export async function renderProjects() {
 
   function editProject(id){const p=allProjects.find(x=>x.id===id);if(!p)return;editingId=id;$('#projModalTitle').textContent='Editar Projeto';$('#pName').value=p.name;$('#pTheme').value=p.theme||'';$('#pStatus').value=p.status;$('#pStart').value=p.start_date||'';$('#pEnd').value=p.end_date||'';$('#pLeader').value=p.leader_id||'';$('#pDescription').value=p.description||'';$('#projModal').classList.add('modal-overlay-active');}
 
-  async function deleteProject(id){if(!await showConfirm('Excluir','Excluir este projeto?'))return;await supabase.from('projects').delete().eq('id',id);showToast('Excluído','success');loadData();}
+  async function deleteProject(id){if(!await showConfirm('Excluir','Excluir este projeto?'))return;await db.projects.delete(id);await addSyncQueue('projects', 'DELETE', null, id);showToast('Excluído','success');loadData();}
 
   async function saveProject(){
-    const data={church_id:churchId,name:$('#pName').value.trim(),theme:$('#pTheme').value.trim()||null,status:$('#pStatus').value,start_date:$('#pStart').value||null,end_date:$('#pEnd').value||null,leader_id:$('#pLeader').value||null,description:$('#pDescription').value.trim()||null};
+    const data={church_id:churchId,name:$('#pName').value.trim(),theme:$('#pTheme').value.trim()||null,status:$('#pStatus').value,start_date:$('#pStart').value||null,end_date:$('#pEnd').value||null,leader_id:$('#pLeader').value||null,description:$('#pDescription').value.trim()||null, created_at: new Date().toISOString()};
     if(!data.name){showToast('Nome obrigatório','warning');return;}
-    try{if(editingId){await supabase.from('projects').update(data).eq('id',editingId);}else{await supabase.from('projects').insert(data);}showToast('Projeto salvo','success');closeModal();loadData();}catch(err){showToast('Erro: '+err.message,'error');}
+    try{
+      if(editingId){
+        await db.projects.update(editingId, data);
+        await addSyncQueue('projects', 'UPDATE', data, editingId);
+      } else {
+        data.id = generateId();
+        await db.projects.put(data);
+        await addSyncQueue('projects', 'INSERT', data);
+      }
+      showToast('Projeto salvo','success');closeModal();loadData();
+    }catch(err){showToast('Erro: '+err.message,'error');}
   }
 
   $('#addProjectBtn')?.addEventListener('click',openModal);$('#closeProjModal')?.addEventListener('click',closeModal);$('#cancelProjBtn')?.addEventListener('click',closeModal);$('#saveProjBtn')?.addEventListener('click',saveProject);

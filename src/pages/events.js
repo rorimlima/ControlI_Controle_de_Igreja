@@ -1,6 +1,6 @@
-import { supabase } from '../lib/supabase.js';
+import { db, addSyncQueue } from '../lib/db.js';
 import { renderLayout, getAppState } from '../main.js';
-import { $, showToast, showConfirm, formatDateTime } from '../lib/utils.js';
+import { $, showToast, showConfirm, formatDateTime, generateId } from '../lib/utils.js';
 
 let allEvents = [];
 
@@ -45,8 +45,8 @@ export async function renderEvents() {
   let calYear = new Date().getFullYear();
 
   async function loadData() {
-    const { data } = await supabase.from('events').select('*').eq('church_id', churchId).order('date', { ascending: false });
-    allEvents = data || [];
+    const data = await db.events.where('church_id').equals(churchId).toArray();
+    allEvents = data.sort((a,b) => new Date(b.date) - new Date(a.date));
     renderCurrentView();
   }
 
@@ -135,7 +135,8 @@ export async function renderEvents() {
 
   async function deleteEvent(id) {
     if(!await showConfirm('Excluir Evento','Tem certeza?')) return;
-    await supabase.from('events').delete().eq('id',id);
+    await db.events.delete(id);
+    await addSyncQueue('events', 'DELETE', null, id);
     showToast('Evento excluído','success'); loadData();
   }
 
@@ -143,8 +144,16 @@ export async function renderEvents() {
     const data = { church_id:churchId, title:$('#eTitle').value.trim(), date:$('#eDate').value, end_date:$('#eEndDate').value||null, location:$('#eLocation').value.trim()||null, description:$('#eDescription').value.trim()||null, color:$('#eColor').value };
     if(!data.title||!data.date){showToast('Preencha título e data','warning');return;}
     try {
-      if(editingId){await supabase.from('events').update(data).eq('id',editingId);showToast('Evento atualizado','success');}
-      else{await supabase.from('events').insert(data);showToast('Evento criado','success');}
+      if(editingId){
+        await db.events.update(editingId, data);
+        await addSyncQueue('events', 'UPDATE', data, editingId);
+        showToast('Evento atualizado','success');
+      } else {
+        data.id = generateId();
+        await db.events.put(data);
+        await addSyncQueue('events', 'INSERT', data);
+        showToast('Evento criado','success');
+      }
       closeModal(); loadData();
     } catch(err){showToast('Erro: '+err.message,'error');}
   }

@@ -1,6 +1,6 @@
-import { supabase } from '../lib/supabase.js';
+import { db, addSyncQueue } from '../lib/db.js';
 import { renderLayout, getAppState } from '../main.js';
-import { $, showToast, formatDate } from '../lib/utils.js';
+import { $, showToast, formatDate, generateId } from '../lib/utils.js';
 
 export async function renderCommunication() {
   const { church, profile } = getAppState();
@@ -48,7 +48,17 @@ export async function renderCommunication() {
   }
 
   async function loadAnnouncements() {
-    const { data } = await supabase.from('announcements').select('*, profiles(full_name)').eq('church_id', churchId).order('pinned', { ascending: false }).order('created_at', { ascending: false });
+    const anns = await db.announcements.where('church_id').equals(churchId).toArray();
+    for (let a of anns) {
+      if(a.author_id) {
+        const prof = await db.profiles.get(a.author_id);
+        a.profiles = { full_name: prof ? prof.full_name : 'Membro' };
+      }
+    }
+    const data = anns.sort((a,b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      return new Date(b.created_at) - new Date(a.created_at);
+    });
     const c = document.getElementById('commContent');
     c.innerHTML = `
       ${isLeader ? '<div style="margin-bottom:16px;"><button class="btn btn-primary" id="newAnnBtn">+ Novo Aviso</button></div>' : ''}
@@ -71,7 +81,14 @@ export async function renderCommunication() {
   }
 
   async function loadPrayers() {
-    const { data } = await supabase.from('prayers').select('*, profiles(full_name)').eq('church_id', churchId).order('created_at', { ascending: false });
+    const prayers = await db.prayers.where('church_id').equals(churchId).toArray();
+    for (let p of prayers) {
+      if(p.author_id) {
+        const prof = await db.profiles.get(p.author_id);
+        p.profiles = { full_name: prof ? prof.full_name : 'Membro' };
+      }
+    }
+    const data = prayers.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
     const c = document.getElementById('commContent');
     c.innerHTML = `
       <div style="margin-bottom:16px;"><button class="btn btn-primary" id="newPrayerBtn">+ Novo Pedido</button></div>
@@ -95,8 +112,15 @@ export async function renderCommunication() {
     `;
     c.querySelector('#newPrayerBtn')?.addEventListener('click', () => $('#prayerModal').classList.add('modal-overlay-active'));
     c.querySelectorAll('.pray-like').forEach(b => b.addEventListener('click', async () => {
-      await supabase.from('prayers').update({ likes_count: (parseInt(b.textContent.replace(/\D/g,''))||0)+1 }).eq('id', b.dataset.id);
-      loadPrayers();
+      const id = b.dataset.id;
+      const p = await db.prayers.get(id);
+      if (p) {
+        const newLikes = (parseInt(b.textContent.replace(/\D/g,''))||0)+1;
+        p.likes_count = newLikes;
+        await db.prayers.put(p);
+        await addSyncQueue('prayers', 'UPDATE', { likes_count: newLikes }, id);
+        loadPrayers();
+      }
     }));
   }
 
@@ -111,9 +135,14 @@ export async function renderCommunication() {
   $('#saveAnnBtn')?.addEventListener('click', async () => {
     const title=$('#annTitleInput').value.trim(), content=$('#annContent').value.trim(), pinned=$('#annPinned').checked;
     if(!title||!content){showToast('Preencha título e conteúdo','warning');return;}
-    const{error}=await supabase.from('announcements').insert({church_id:churchId,author_id:profile.id,title,content,pinned});
-    if(error){showToast('Erro: '+error.message,'error');return;}
-    showToast('Aviso publicado!','success'); $('#annModal').classList.remove('modal-overlay-active'); loadTab();
+    const data = { id: generateId(), church_id: churchId, author_id: profile?.id, title, content, pinned, created_at: new Date().toISOString() };
+    try {
+      await db.announcements.put(data);
+      await addSyncQueue('announcements', 'INSERT', data);
+      showToast('Aviso publicado!','success'); $('#annModal').classList.remove('modal-overlay-active'); loadTab();
+    } catch(error) {
+      showToast('Erro: '+error.message,'error');
+    }
   });
 
   $('#closePrayerModal')?.addEventListener('click', () => $('#prayerModal').classList.remove('modal-overlay-active'));
@@ -122,9 +151,14 @@ export async function renderCommunication() {
   $('#savePrayerBtn')?.addEventListener('click', async () => {
     const content=$('#prayerContent').value.trim(), is_anonymous=$('#prayerAnon').checked;
     if(!content){showToast('Escreva seu pedido','warning');return;}
-    const{error}=await supabase.from('prayers').insert({church_id:churchId,author_id:profile.id,content,is_anonymous});
-    if(error){showToast('Erro: '+error.message,'error');return;}
-    showToast('Pedido enviado!','success'); $('#prayerModal').classList.remove('modal-overlay-active'); loadTab();
+    const data = { id: generateId(), church_id: churchId, author_id: profile?.id, content, is_anonymous, status: 'active', likes_count: 0, created_at: new Date().toISOString() };
+    try {
+      await db.prayers.put(data);
+      await addSyncQueue('prayers', 'INSERT', data);
+      showToast('Pedido enviado!','success'); $('#prayerModal').classList.remove('modal-overlay-active'); loadTab();
+    } catch(error) {
+      showToast('Erro: '+error.message,'error');
+    }
   });
 
   loadTab();

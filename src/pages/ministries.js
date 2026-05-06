@@ -1,6 +1,6 @@
-import { supabase } from '../lib/supabase.js';
+import { db, addSyncQueue } from '../lib/db.js';
 import { renderLayout, getAppState } from '../main.js';
-import { $, showToast, showConfirm } from '../lib/utils.js';
+import { $, showToast, showConfirm, generateId } from '../lib/utils.js';
 
 export async function renderMinistries() {
   const { church } = getAppState();
@@ -44,12 +44,16 @@ export async function renderMinistries() {
   let currentMinistryId = null;
 
   async function loadData() {
-    const [mRes, membersRes] = await Promise.all([
-      supabase.from('ministries').select('*, ministry_members(member_id, members(full_name))').eq('church_id', churchId).order('name'),
-      supabase.from('members').select('id, full_name').eq('church_id', churchId).eq('status', 'active').order('full_name')
-    ]);
-    allMinistries = mRes.data || [];
-    allMembers = membersRes.data || [];
+    const mRes = await db.ministries.where('church_id').equals(churchId).toArray();
+    const membersRes = (await db.members.where('church_id').equals(churchId).toArray()).filter(m => m.status === 'active');
+    
+    const ministryMembers = await db.ministry_members.toArray();
+    for (let m of mRes) {
+      m.ministry_members = ministryMembers.filter(mm => mm.ministry_id === m.id);
+    }
+    
+    allMinistries = mRes.sort((a,b)=>a.name.localeCompare(b.name)) || [];
+    allMembers = membersRes.sort((a,b)=>a.full_name.localeCompare(b.full_name)) || [];
     renderMinistryCards();
     populateLeaderSelect();
   }
@@ -102,7 +106,8 @@ export async function renderMinistries() {
 
   async function deleteMinistry(id) {
     if(!await showConfirm('Excluir','Excluir este ministério?')) return;
-    await supabase.from('ministries').delete().eq('id',id);
+    await db.ministries.delete(id);
+    await addSyncQueue('ministries', 'DELETE', null, id);
     showToast('Ministério excluído','success'); loadData();
   }
 
@@ -110,8 +115,14 @@ export async function renderMinistries() {
     const data = { church_id:churchId, name:$('#miName').value.trim(), leader_id:$('#miLeader').value||null, description:$('#miDescription').value.trim()||null };
     if(!data.name){showToast('Nome é obrigatório','warning');return;}
     try {
-      if(editingId){await supabase.from('ministries').update(data).eq('id',editingId);}
-      else{await supabase.from('ministries').insert(data);}
+      if(editingId){
+        await db.ministries.update(editingId, data);
+        await addSyncQueue('ministries', 'UPDATE', data, editingId);
+      } else {
+        data.id = generateId();
+        await db.ministries.put(data);
+        await addSyncQueue('ministries', 'INSERT', data);
+      }
       showToast('Ministério salvo','success'); closeModal(); loadData();
     } catch(err){showToast('Erro: '+err.message,'error');}
   }
@@ -127,7 +138,11 @@ export async function renderMinistries() {
   }
 
   async function loadMinistryMembers() {
-    const { data } = await supabase.from('ministry_members').select('*, members(full_name)').eq('ministry_id', currentMinistryId);
+    const data = await db.ministry_members.where('ministry_id').equals(currentMinistryId).toArray();
+    for(let mm of data) {
+      const m = await db.members.get(mm.member_id);
+      mm.members = m || {};
+    }
     const el = document.getElementById('ministryMembersList');
     if(!data?.length) { el.innerHTML='<p class="text-muted text-center">Nenhum membro adicionado</p>'; return; }
     el.innerHTML = data.map(mm => `
@@ -137,7 +152,8 @@ export async function renderMinistries() {
       </div>
     `).join('');
     el.querySelectorAll('.mm-remove').forEach(b=>b.addEventListener('click', async ()=>{
-      await supabase.from('ministry_members').delete().eq('id',b.dataset.id);
+      await db.ministry_members.delete(b.dataset.id);
+      await addSyncQueue('ministry_members', 'DELETE', null, b.dataset.id);
       showToast('Membro removido','success'); loadMinistryMembers(); loadData();
     }));
   }
@@ -152,8 +168,11 @@ export async function renderMinistries() {
   $('#addMemberToMinistry')?.addEventListener('click', async ()=>{
     const memberId = $('#addMemberSelect').value;
     if(!memberId){showToast('Selecione um membro','warning');return;}
-    const { error } = await supabase.from('ministry_members').insert({ministry_id:currentMinistryId,member_id:memberId});
-    if(error){showToast(error.message.includes('duplicate')?'Membro já está neste ministério':'Erro: '+error.message,'error');return;}
+    const existing = (await db.ministry_members.where('ministry_id').equals(currentMinistryId).toArray()).find(mm => mm.member_id === memberId);
+    if(existing){showToast('Membro já está neste ministério','error');return;}
+    const data = { id: generateId(), ministry_id: currentMinistryId, member_id: memberId };
+    await db.ministry_members.put(data);
+    await addSyncQueue('ministry_members', 'INSERT', data);
     showToast('Membro adicionado','success'); loadMinistryMembers(); loadData();
   });
 

@@ -1,6 +1,6 @@
-import { supabase } from '../lib/supabase.js';
+import { db, addSyncQueue } from '../lib/db.js';
 import { renderLayout, getAppState } from '../main.js';
-import { $, showToast, showConfirm, formatCurrency, formatDate, getTypeBadge, debounce } from '../lib/utils.js';
+import { $, showToast, showConfirm, formatCurrency, formatDate, getTypeBadge, debounce, generateId } from '../lib/utils.js';
 import Chart from 'chart.js/auto';
 import { jsPDF } from 'jspdf';
 
@@ -155,11 +155,18 @@ async function loadData() {
   await Promise.all([fetchAccounts(), fetchCategories(), fetchTransactions(), fetchMembers(), fetchSuppliers()]);
   renderAll();
 }
-async function fetchAccounts() { const { data } = await supabase.from('financial_accounts').select('*').eq('church_id', churchId); allAccounts = data || []; }
-async function fetchCategories() { const { data } = await supabase.from('financial_categories').select('*').eq('church_id', churchId); allCategories = data || []; }
-async function fetchTransactions() { const { data } = await supabase.from('financial_transactions').select('*, financial_accounts(*), financial_categories(*)').eq('church_id', churchId).order('date', { ascending: false }); allTransactions = data || []; }
-async function fetchMembers() { const { data } = await supabase.from('members').select('id, full_name').eq('church_id', churchId).order('full_name'); allMembers = data || []; }
-async function fetchSuppliers() { const { data } = await supabase.from('suppliers').select('*').eq('church_id', churchId).order('name'); allSuppliers = data || []; }
+async function fetchAccounts() { allAccounts = await db.financial_accounts.where('church_id').equals(churchId).toArray(); }
+async function fetchCategories() { allCategories = await db.financial_categories.where('church_id').equals(churchId).toArray(); }
+async function fetchTransactions() {
+  const data = await db.financial_transactions.where('church_id').equals(churchId).toArray();
+  for (let t of data) {
+    t.financial_accounts = allAccounts.find(a => a.id === t.account_id) || null;
+    t.financial_categories = allCategories.find(c => c.id === t.category_id) || null;
+  }
+  allTransactions = data.sort((a,b) => (b.date||'').localeCompare(a.date||''));
+}
+async function fetchMembers() { allMembers = (await db.members.where('church_id').equals(churchId).toArray()).sort((a,b) => (a.full_name||'').localeCompare(b.full_name||'')); }
+async function fetchSuppliers() { allSuppliers = (await db.suppliers.where('church_id').equals(churchId).toArray()).sort((a,b) => (a.name||'').localeCompare(b.name||'')); }
 
 function renderAll() { updateStats(); applyFilters(); renderAccounts(); renderCategories(); renderSuppliers(); renderReconciliation(); }
 
@@ -287,7 +294,9 @@ function renderReconciliation() {
   };
 }
 async function reconcile(id) {
-  await supabase.from('financial_transactions').update({ status: 'reconciled', reconciliation_date: new Date().toISOString() }).eq('id', id);
+  const updateData = { status: 'reconciled', reconciliation_date: new Date().toISOString() };
+  await db.financial_transactions.update(id, updateData);
+  await addSyncQueue('financial_transactions', 'UPDATE', updateData, id);
   showToast('Conciliado!', 'success'); await fetchTransactions(); renderAll();
   $('#recAccountSelect').dispatchEvent(new Event('change'));
 }
@@ -421,11 +430,12 @@ async function saveTrans() {
 
   const data = { church_id: churchId, type, amount, date, account_id: accountId, category_id: document.getElementById('tCategory').value || null, description: document.getElementById('tDescription').value || null, member_id: memberId, supplier_id: supplierId, status: 'pending' };
   try {
-    const { data: ins, error } = await supabase.from('financial_transactions').insert(data).select().single();
-    if (error) throw error;
+    data.id = generateId();
+    await db.financial_transactions.put(data);
+    await addSyncQueue('financial_transactions', 'INSERT', data);
     showToast('Lançamento efetivado!', 'success');
     document.getElementById('transModal').classList.remove('modal-overlay-active');
-    if (type === 'dizimo' && ins) {
+    if (type === 'dizimo') {
       const mem = allMembers.find(m => m.id === memberId);
       if (mem) setTimeout(() => genPDF({ memberName: mem.full_name, amount, date, type: 'Dízimo' }), 300);
     }
@@ -435,51 +445,66 @@ async function saveTrans() {
 
 async function deleteTrans(id) {
   if (!await showConfirm('Excluir', 'Confirmar exclusão?')) return;
-  await supabase.from('financial_transactions').delete().eq('id', id);
+  await db.financial_transactions.delete(id);
+  await addSyncQueue('financial_transactions', 'DELETE', null, id);
   showToast('Excluído', 'success'); await fetchTransactions(); renderAll();
 }
 
 async function saveAccount() {
   const d = { church_id: churchId, name: document.getElementById('aName').value, type: document.getElementById('aType').value, bank_name: document.getElementById('aBank').value || null, initial_balance: parseFloat(document.getElementById('aBal').value || 0) };
   if (!d.name) { showToast('Nome obrigatório', 'warning'); return; }
-  const { error } = await supabase.from('financial_accounts').insert(d);
-  if (error) { showToast('Erro', 'error'); return; }
-  showToast('Conta criada!', 'success'); document.getElementById('accModal').classList.remove('modal-overlay-active');
-  await fetchAccounts(); renderAll();
+  try {
+    d.id = generateId();
+    await db.financial_accounts.put(d);
+    await addSyncQueue('financial_accounts', 'INSERT', d);
+    showToast('Conta criada!', 'success'); document.getElementById('accModal').classList.remove('modal-overlay-active');
+    await fetchAccounts(); renderAll();
+  } catch (error) { showToast('Erro', 'error'); }
 }
 async function deleteAccount(id) {
   if (!await showConfirm('Excluir Conta', 'Transações vinculadas serão removidas. Confirmar?')) return;
-  await supabase.from('financial_accounts').delete().eq('id', id);
+  await db.financial_accounts.delete(id);
+  await addSyncQueue('financial_accounts', 'DELETE', null, id);
   await fetchAccounts(); await fetchTransactions(); renderAll();
 }
 
 async function saveCategory() {
   const d = { church_id: churchId, name: document.getElementById('cName').value, type: document.getElementById('cType').value };
   if (!d.name) { showToast('Nome obrigatório', 'warning'); return; }
-  const { error } = await supabase.from('financial_categories').insert(d);
-  if (error) { showToast('Erro', 'error'); return; }
-  showToast('Categoria criada!', 'success'); document.getElementById('catModal').classList.remove('modal-overlay-active');
-  await fetchCategories(); renderAll();
+  try {
+    d.id = generateId();
+    await db.financial_categories.put(d);
+    await addSyncQueue('financial_categories', 'INSERT', d);
+    showToast('Categoria criada!', 'success'); document.getElementById('catModal').classList.remove('modal-overlay-active');
+    await fetchCategories(); renderAll();
+  } catch (error) { showToast('Erro', 'error'); }
 }
 async function deleteCategory(id) {
-  const { error } = await supabase.from('financial_categories').delete().eq('id', id);
-  if (error) { showToast('Em uso, não pode excluir', 'error'); return; }
-  await fetchCategories(); renderAll();
+  try {
+    await db.financial_categories.delete(id);
+    await addSyncQueue('financial_categories', 'DELETE', null, id);
+    await fetchCategories(); renderAll();
+  } catch (error) { showToast('Em uso, não pode excluir', 'error'); }
 }
 
 async function saveSupplier() {
   const d = { church_id: churchId, person_type: document.getElementById('sPersonType').value, name: document.getElementById('sName').value, cpf_cnpj: document.getElementById('sCpfCnpj').value || null, address: document.getElementById('sAddress').value || null, contact_phone: document.getElementById('sPhone').value || null, contact_email: document.getElementById('sEmail').value || null, notes: document.getElementById('sNotes').value || null };
   if (!d.name) { showToast('Nome obrigatório', 'warning'); return; }
-  const { error } = await supabase.from('suppliers').insert(d);
-  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
-  showToast('Fornecedor cadastrado!', 'success'); document.getElementById('supModal').classList.remove('modal-overlay-active');
-  await fetchSuppliers(); renderAll();
+  try {
+    d.id = generateId();
+    await db.suppliers.put(d);
+    await addSyncQueue('suppliers', 'INSERT', d);
+    showToast('Fornecedor cadastrado!', 'success'); document.getElementById('supModal').classList.remove('modal-overlay-active');
+    await fetchSuppliers(); renderAll();
+  } catch (error) { showToast('Erro: ' + error.message, 'error'); }
 }
 async function deleteSupplier(id) {
   if (!await showConfirm('Excluir Fornecedor', 'Confirmar?')) return;
-  const { error } = await supabase.from('suppliers').delete().eq('id', id);
-  if (error) { showToast('Não é possível. Existem compras vinculadas.', 'error'); return; }
-  await fetchSuppliers(); renderAll();
+  try {
+    await db.suppliers.delete(id);
+    await addSyncQueue('suppliers', 'DELETE', null, id);
+    await fetchSuppliers(); renderAll();
+  } catch (error) { showToast('Não é possível. Existem compras vinculadas.', 'error'); }
 }
 
 function exportCSV() {

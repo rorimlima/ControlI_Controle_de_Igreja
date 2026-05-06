@@ -1,6 +1,6 @@
-import { supabase } from '../lib/supabase.js';
+import { db, addSyncQueue } from '../lib/db.js';
 import { renderLayout, getAppState } from '../main.js';
-import { $, showToast, showConfirm, formatDate, getStatusBadge, getRoleBadge, debounce } from '../lib/utils.js';
+import { $, showToast, showConfirm, formatDate, getStatusBadge, getRoleBadge, debounce, generateId } from '../lib/utils.js';
 
 let allMembers = [];
 let currentPage = 1;
@@ -167,10 +167,13 @@ export async function renderMembers() {
   let editingId = null;
 
   async function loadMembers() {
-    const { data, error } = await supabase.from('members').select('*').eq('church_id', churchId).order('full_name');
-    if (error) { showToast('Erro ao carregar membros: ' + error.message, 'error'); return; }
-    allMembers = data || [];
-    applyFilters();
+    try {
+      const data = await db.members.where('church_id').equals(churchId).toArray();
+      allMembers = data.sort((a,b) => (a.full_name||'').localeCompare(b.full_name||''));
+      applyFilters();
+    } catch (error) {
+      showToast('Erro ao carregar membros: ' + error.message, 'error');
+    }
   }
 
   function applyFilters() {
@@ -289,10 +292,14 @@ export async function renderMembers() {
     const member = allMembers.find(m => m.id === id);
     const confirmed = await showConfirm('Excluir Membro', `Tem certeza que deseja excluir <strong>${member?.full_name}</strong>?`);
     if (!confirmed) return;
-    const { error } = await supabase.from('members').delete().eq('id', id);
-    if (error) { showToast('Erro ao excluir: ' + error.message, 'error'); return; }
-    showToast('Membro excluído com sucesso', 'success');
-    loadMembers();
+    try {
+      await db.members.delete(id);
+      await addSyncQueue('members', 'DELETE', null, id);
+      showToast('Membro excluído com sucesso', 'success');
+      loadMembers();
+    } catch (error) {
+      showToast('Erro ao excluir: ' + error.message, 'error');
+    }
   }
 
   async function saveMember() {
@@ -320,12 +327,13 @@ export async function renderMembers() {
 
     try {
       if (editingId) {
-        const { error } = await supabase.from('members').update(data).eq('id', editingId);
-        if (error) throw error;
+        await db.members.update(editingId, data);
+        await addSyncQueue('members', 'UPDATE', data, editingId);
         showToast('Membro atualizado com sucesso', 'success');
       } else {
-        const { error } = await supabase.from('members').insert(data);
-        if (error) throw error;
+        data.id = generateId();
+        await db.members.put(data);
+        await addSyncQueue('members', 'INSERT', data);
         showToast('Membro cadastrado com sucesso', 'success');
       }
       closeModal();

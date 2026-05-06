@@ -3,6 +3,7 @@ import { Router } from './lib/router.js';
 import { supabase } from './lib/supabase.js';
 import { getSession, getProfile, onAuthStateChange, signOut } from './lib/auth.js';
 import { $, showToast } from './lib/utils.js';
+import { triggerSync } from './lib/sync.js';
 import { renderLogin } from './pages/login.js';
 import { renderDashboard } from './pages/dashboard.js';
 import { renderMembers } from './pages/members.js';
@@ -31,6 +32,9 @@ export function getAppState() {
 export function setCurrentChurch(church) {
   currentChurch = church;
   localStorage.setItem('ci_church_id', church?.id || '');
+  if (church?.id) {
+    triggerSync(church.id);
+  }
 }
 
 function renderSidebar() {
@@ -128,7 +132,10 @@ function renderHeader(title, subtitle) {
         </div>
       </div>
       <div class="header-right">
-        <div class="header-church-badge">
+        <div class="header-church-badge" style="display:flex;align-items:center;gap:8px;">
+          <div id="globalSyncIndicator" class="sync-online" style="font-size: 1.2rem; cursor: pointer;" onclick="window.triggerSync && window.triggerSync()">
+            <span title="Sincronizado">☁️✓</span>
+          </div>
           <span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L6 6v16h12V6z"></path><path d="M12 10v6"></path><path d="M10 12h4"></path></svg></span>
           <span id="headerChurchName">${churchName}</span>
         </div>
@@ -221,6 +228,10 @@ async function loadUserData() {
     } else if (currentProfile?.church_id) {
       const { data } = await supabase.from('churches').select('*').eq('id', currentProfile.church_id).maybeSingle();
       currentChurch = data;
+    }
+
+    if (currentChurch?.id) {
+      setTimeout(() => triggerSync(currentChurch.id), 1000);
     }
 
     return true;
